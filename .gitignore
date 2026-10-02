@@ -1,0 +1,27 @@
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Dados de execução (uploads, SQLite, banco vetorial)
+backend/dados/
+
+# Node
+node_modules/
+dist/
+
+# Editores e sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
