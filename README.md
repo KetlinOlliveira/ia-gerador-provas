@@ -21,6 +21,19 @@ uv run uvicorn app.main:app --reload
 - API: http://localhost:8000/api/v1/health
 - Documentação interativa: http://localhost:8000/docs
 
+O primeiro envio de documento baixa o modelo de embeddings (cerca de 240 MB) para
+`backend/dados/modelos`. Os envios seguintes usam o modelo em cache.
+
+## Endpoints
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/api/v1/documentos` | Envia um `.txt`, `.pdf` ou `.docx`, que é dividido em trechos e indexado |
+| `GET` | `/api/v1/documentos` | Lista os documentos enviados |
+| `GET` | `/api/v1/documentos/{id}` | Detalhes de um documento |
+| `DELETE` | `/api/v1/documentos/{id}` | Remove o documento e seus vetores |
+| `POST` | `/api/v1/documentos/{id}/busca` | Busca semântica nos trechos do documento |
+
 ## Testes
 
 ```bash

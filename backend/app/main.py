@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,13 +10,20 @@ from app.api.roteador import roteador_api
 from app.core.config import obter_configuracoes
 from app.core.excecoes import ErroAplicacao
 from app.core.logs import configurar_logs
+from app.db.base import criar_tabelas, obter_engine
+
+
+@asynccontextmanager
+async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
+    criar_tabelas(obter_engine())
+    yield
 
 
 def criar_app() -> FastAPI:
     configuracoes = obter_configuracoes()
     configurar_logs(configuracoes.nivel_log)
 
-    app = FastAPI(title=configuracoes.nome_app, version=__version__)
+    app = FastAPI(title=configuracoes.nome_app, version=__version__, lifespan=ciclo_de_vida)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=configuracoes.origens_cors,

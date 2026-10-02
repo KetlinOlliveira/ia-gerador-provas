@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
@@ -25,6 +26,16 @@ class Configuracoes(BaseSettings):
     llm_max_tentativas_validacao: int = Field(default=3, ge=1)
     llm_max_concorrencia: int = Field(default=4, ge=1)
     llm_timeout_segundos: float = Field(default=60, gt=0)
+
+    # SQLite, banco vetorial e cache do modelo de embeddings ficam aqui.
+    diretorio_dados: Path = Path("dados")
+    tamanho_max_upload_mb: int = Field(default=20, ge=1)
+
+    modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Em caracteres. Trechos curtos tratam de um assunto só, e o vetor de um modelo
+    # pequeno como este fica mais preciso: com 1000 caracteres a busca misturava temas.
+    tamanho_trecho: int = Field(default=400, ge=200)
+    sobreposicao_trecho: int = Field(default=80, ge=0)
 
     @field_validator("origens_cors", mode="before")
     @classmethod

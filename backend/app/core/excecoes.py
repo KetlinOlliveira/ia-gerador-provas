@@ -9,6 +9,31 @@ class ErroAplicacao(Exception):
         self.mensagem = mensagem
 
 
+class ErroNaoEncontrado(ErroAplicacao):
+    status_http = 404
+    codigo = "nao_encontrado"
+
+
+class ErroArquivoGrande(ErroAplicacao):
+    status_http = 413
+    codigo = "arquivo_grande"
+
+
+class ErroTipoNaoSuportado(ErroAplicacao):
+    status_http = 415
+    codigo = "tipo_nao_suportado"
+
+
+class ErroArquivoInvalido(ErroAplicacao):
+    status_http = 422
+    codigo = "arquivo_invalido"
+
+
+class ErroDocumentoSemTexto(ErroAplicacao):
+    status_http = 422
+    codigo = "documento_sem_texto"
+
+
 class ErroLLMNaoConfigurado(ErroAplicacao):
     status_http = 503
     codigo = "llm_nao_configurado"
