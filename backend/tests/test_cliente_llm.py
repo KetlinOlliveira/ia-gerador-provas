@@ -1,13 +1,14 @@
 from types import SimpleNamespace
+from typing import Literal
 
 import httpx
 import pytest
 from groq import BadRequestError, RateLimitError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.config import Configuracoes
 from app.core.excecoes import ErroLLM, ErroLLMNaoConfigurado, ErroSaidaLLM
-from app.llm.cliente import ClienteLLM, PapelModelo
+from app.llm.cliente import ClienteLLM, PapelModelo, esquema_estrito
 
 
 class Topicos(BaseModel):
@@ -51,14 +52,62 @@ async def perguntar(cliente, papel=PapelModelo.PLANEJADOR):
     )
 
 
-async def test_devolve_objeto_validado_e_usa_modo_json():
+async def test_devolve_objeto_validado_e_usa_saida_estrita():
     falso = GroqFalso('{"topicos": ["REST", "HTTP"]}')
     resultado = await perguntar(criar_cliente(falso))
 
     assert resultado == Topicos(topicos=["REST", "HTTP"])
+    formato = falso.chamadas[0]["response_format"]
+    assert formato["type"] == "json_schema"
+    assert formato["json_schema"]["strict"] is True
+    assert formato["json_schema"]["schema"]["required"] == ["topicos"]
+
+
+async def test_sem_saida_estrita_usa_modo_json_com_esquema_no_prompt():
+    falso = GroqFalso('{"topicos": ["REST"]}')
+    await perguntar(criar_cliente(falso, llm_saida_estrita=False))
+
     chamada = falso.chamadas[0]
     assert chamada["response_format"] == {"type": "json_object"}
-    assert '"topicos"' in chamada["messages"][0]["content"]  # o esquema vai no prompt de sistema
+    assert '"topicos"' in chamada["messages"][0]["content"]
+
+
+async def test_esforco_de_raciocinio_so_vai_para_modelos_gpt_oss():
+    falso = GroqFalso('{"topicos": []}', '{"topicos": []}')
+    cliente = criar_cliente(
+        falso, modelo_planejador="openai/gpt-oss-20b", modelo_revisor="qwen/qwen3.8-27b"
+    )
+
+    await perguntar(cliente, PapelModelo.PLANEJADOR)
+    await perguntar(cliente, PapelModelo.REVISOR)
+
+    assert falso.chamadas[0]["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in falso.chamadas[1]
+
+
+class Item(BaseModel):
+    nome: str = Field(default="x", min_length=1, title="Nome")
+    tipo: Literal["item"] = "item"
+
+
+class Lista(BaseModel):
+    itens: list[Item] = Field(min_length=1, max_length=3)
+    observacao: str | None = None
+
+
+def test_esquema_estrito_exige_todos_os_campos_e_proibe_extras():
+    esquema = esquema_estrito(Lista)
+
+    assert esquema["required"] == ["itens", "observacao"]
+    assert esquema["additionalProperties"] is False
+    item = esquema["$defs"]["Item"]
+    assert item["required"] == ["nome", "tipo"]
+    assert item["additionalProperties"] is False
+    assert item["properties"]["tipo"]["enum"] == ["item"]
+    # Restrições não suportadas saem do esquema (o Pydantic continua validando).
+    assert "minItems" not in esquema["properties"]["itens"]
+    assert "minLength" not in item["properties"]["nome"]
+    assert "default" not in item["properties"]["nome"]
 
 
 async def test_escolhe_modelo_pelo_papel():

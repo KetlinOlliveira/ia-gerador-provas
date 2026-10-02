@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -18,14 +18,28 @@ class Configuracoes(BaseSettings):
     # LLM levanta um erro claro na primeira vez em que ela for realmente necessária.
     groq_api_key: SecretStr | None = None
 
-    modelo_planejador: str = "llama-3.1-8b-instant"
-    modelo_gerador: str = "llama-3.1-8b-instant"
-    modelo_revisor: str = "llama-3.1-8b-instant"
+    modelo_planejador: str = "openai/gpt-oss-20b"
+    modelo_gerador: str = "openai/gpt-oss-20b"
+    modelo_revisor: str = "openai/gpt-oss-120b"
 
-    llm_max_retentativas: int = Field(default=4, ge=0)
+    # O plano gratuito da Groq limita tokens por minuto: as retentativas esperam o
+    # `retry-after` do 429, e a concorrência baixa evita estourar o limite à toa.
+    llm_max_retentativas: int = Field(default=8, ge=0)
     llm_max_tentativas_validacao: int = Field(default=3, ge=1)
-    llm_max_concorrencia: int = Field(default=4, ge=1)
-    llm_timeout_segundos: float = Field(default=60, gt=0)
+    llm_max_concorrencia: int = Field(default=2, ge=1)
+    llm_timeout_segundos: float = Field(default=90, gt=0)
+    # Saída estrita: o provedor restringe a decodificação ao JSON Schema. Desligue
+    # para modelos que só aceitam o modo JSON simples.
+    llm_saida_estrita: bool = True
+    # Só se aplica aos modelos de raciocínio (gpt-oss). "low" gasta menos tokens.
+    llm_esforco_raciocinio: Literal["low", "medium", "high"] = "low"
+
+    # Agentes
+    nota_minima_revisao: int = Field(default=7, ge=0, le=10)
+    max_tentativas_por_questao: int = Field(default=2, ge=1)
+    trechos_por_topico: int = Field(default=5, ge=1)
+    # Quanto do documento o planejador lê para extrair os tópicos.
+    max_caracteres_planejador: int = Field(default=12000, ge=1000)
 
     # O padrão aponta para o Postgres do docker compose visto do host; dentro do
     # compose o serviço do backend sobrescreve com o host `db`.

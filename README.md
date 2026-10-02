@@ -18,6 +18,28 @@ docker compose
 Documentos e vetores ficam no mesmo banco, então são gravados na mesma transação e a busca
 semântica é uma consulta SQL comum, ordenada pela distância de cosseno do pgvector.
 
+### Pipeline de agentes
+
+```
+documento ─► Planejador ─► tópicos ─► para cada questão:
+                                        Recuperação (RAG) dos trechos do tópico
+                                        Gerador ─► questão + gabarito + trechos citados
+                                        Revisor ─► nota, fundamentação, problemas
+                                          └─ reprovada? o Gerador refaz com as críticas
+```
+
+- **Planejador**: lê uma amostra espalhada pelo documento inteiro e extrai os subtemas.
+- **Gerador**: escreve a questão e o gabarito na mesma chamada, só com base nos trechos
+  recuperados, e informa quais trechos usou (as fontes da questão).
+- **Revisor**: um modelo maior avalia clareza, nível de dificuldade e se o gabarito é
+  sustentado pelo material. A aprovação é decidida pelo código, não pelo modelo.
+- **Orquestrador**: tópicos diferentes são gerados em paralelo; questões do mesmo tópico,
+  em sequência, para não se repetirem.
+
+A saída de cada agente é um modelo Pydantic. O provedor restringe a geração ao JSON Schema
+(modo estrito), e regras que o esquema não expressa, como os critérios de correção somarem
+10, são validadas no código e devolvidas ao modelo para correção.
+
 ## Rodando com Docker
 
 Requer Docker com o Compose.
