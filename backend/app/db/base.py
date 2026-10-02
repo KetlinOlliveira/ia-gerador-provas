@@ -13,18 +13,7 @@ class Base(DeclarativeBase):
 
 @lru_cache
 def obter_engine() -> Engine:
-    configuracoes = obter_configuracoes()
-    configuracoes.diretorio_dados.mkdir(parents=True, exist_ok=True)
-    caminho = configuracoes.diretorio_dados / "app.db"
-    # As rotas síncronas rodam no pool de threads do FastAPI, então a conexão
-    # do SQLite precisa poder ser usada fora da thread que a criou.
-    return create_engine(f"sqlite:///{caminho}", connect_args={"check_same_thread": False})
-
-
-def criar_tabelas(engine: Engine) -> None:
-    from app.db import modelos  # noqa: F401  (registra os modelos na Base)
-
-    Base.metadata.create_all(engine)
+    return create_engine(obter_configuracoes().url_banco, pool_pre_ping=True)
 
 
 def obter_sessao() -> Iterator[Session]:

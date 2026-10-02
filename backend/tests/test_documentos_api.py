@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 from tests.arquivos import criar_pdf
 
 AULA_REST = (
@@ -86,12 +88,22 @@ def test_busca_fica_restrita_ao_documento_consultado(cliente):
     assert all("mitocôndrias" not in resultado["texto"] for resultado in resultados)
 
 
-def test_exclusao_remove_o_documento_e_seus_vetores(cliente):
+def contar_trechos(engine, documento_id):
+    with engine.connect() as conexao:
+        return conexao.scalar(
+            text("SELECT count(*) FROM trechos WHERE documento_id = :id"), {"id": documento_id}
+        )
+
+
+def test_exclusao_remove_o_documento_e_seus_vetores(cliente, engine_testes):
     rest = enviar(cliente, "rest.txt", AULA_REST).json()
     bio = enviar(cliente, "bio.txt", AULA_BIOLOGIA).json()
+    assert contar_trechos(engine_testes, rest["id"]) == rest["total_trechos"]
 
     assert cliente.delete(f"/api/v1/documentos/{rest['id']}").status_code == 204
 
+    assert contar_trechos(engine_testes, rest["id"]) == 0
+    assert contar_trechos(engine_testes, bio["id"]) == bio["total_trechos"]
     assert cliente.get(f"/api/v1/documentos/{rest['id']}").status_code == 404
     assert buscar(cliente, rest["id"], "REST").status_code == 404
     assert len(buscar(cliente, bio["id"], "fotossíntese").json()) > 0

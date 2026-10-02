@@ -2,30 +2,24 @@ import hashlib
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Configuracoes
 from app.core.excecoes import ErroNaoEncontrado
-from app.db.modelos import Documento
+from app.db.modelos import Documento, Trecho
 from app.ingestao.divisor import dividir_em_trechos
 from app.ingestao.extratores import extrair_texto, identificar_tipo
-from app.rag.banco_vetorial import BancoVetorial, ResultadoBusca
+from app.rag.busca import ResultadoBusca, buscar_trechos_semelhantes
 from app.rag.embeddings import Embedder
 
 logger = logging.getLogger(__name__)
 
 
 class ServicoDocumentos:
-    def __init__(
-        self,
-        sessao: Session,
-        embedder: Embedder,
-        banco_vetorial: BancoVetorial,
-        configuracoes: Configuracoes,
-    ) -> None:
+    def __init__(self, sessao: Session, embedder: Embedder, configuracoes: Configuracoes) -> None:
         self._sessao = sessao
         self._embedder = embedder
-        self._banco_vetorial = banco_vetorial
         self._configuracoes = configuracoes
 
     def ingerir(self, nome_arquivo: str, conteudo: bytes) -> tuple[Documento, bool]:
@@ -37,19 +31,17 @@ class ServicoDocumentos:
         tipo = identificar_tipo(nome_arquivo)
         hash_sha256 = hashlib.sha256(conteudo).hexdigest()
 
-        existente = self._sessao.scalar(
-            select(Documento).where(Documento.hash_sha256 == hash_sha256)
-        )
+        existente = self._buscar_por_hash(hash_sha256)
         if existente is not None:
             return existente, False
 
         extraido = extrair_texto(conteudo, tipo)
-        trechos = dividir_em_trechos(
+        divididos = dividir_em_trechos(
             extraido,
             tamanho=self._configuracoes.tamanho_trecho,
             sobreposicao=self._configuracoes.sobreposicao_trecho,
         )
-        vetores = self._embedder.embutir_trechos([trecho.texto for trecho in trechos])
+        vetores = self._embedder.embutir_trechos([dividido.texto for dividido in divididos])
 
         documento = Documento(
             nome_arquivo=nome_arquivo,
@@ -57,23 +49,31 @@ class ServicoDocumentos:
             tamanho_bytes=len(conteudo),
             hash_sha256=hash_sha256,
             total_caracteres=sum(len(pagina) for pagina in extraido.paginas),
-            total_trechos=len(trechos),
+            total_trechos=len(divididos),
             total_paginas=len(extraido.paginas) if extraido.paginado else None,
+            trechos=[
+                Trecho(
+                    ordem=dividido.ordem,
+                    pagina=dividido.pagina,
+                    texto=dividido.texto,
+                    embedding=vetor,
+                )
+                for dividido, vetor in zip(divididos, vetores, strict=True)
+            ],
         )
+        # Documento e vetores entram na mesma transação: ou tudo é gravado, ou nada.
         self._sessao.add(documento)
-        self._sessao.flush()  # gera o id usado para marcar os vetores
-
-        # Os dois bancos não compartilham transação: se o commit falhar depois de
-        # os vetores entrarem, eles são removidos para não ficarem órfãos.
-        self._banco_vetorial.adicionar(documento.id, trechos, vetores)
         try:
             self._sessao.commit()
-        except Exception:
+        except IntegrityError:
+            # Outro envio do mesmo arquivo terminou primeiro; o dele vale.
             self._sessao.rollback()
-            self._banco_vetorial.remover(documento.id)
-            raise
+            existente = self._buscar_por_hash(hash_sha256)
+            if existente is None:
+                raise
+            return existente, False
 
-        logger.info("Documento %s indexado em %d trechos", documento.id, len(trechos))
+        logger.info("Documento %s indexado em %d trechos", documento.id, len(divididos))
         return documento, True
 
     def listar(self) -> list[Documento]:
@@ -86,14 +86,14 @@ class ServicoDocumentos:
         return documento
 
     def excluir(self, documento_id: str) -> None:
-        documento = self.obter(documento_id)
-        # Vetores primeiro: se algo falhar aqui, o documento continua listado e a
-        # exclusão pode ser repetida. Na ordem inversa sobrariam vetores sem dono.
-        self._banco_vetorial.remover(documento.id)
-        self._sessao.delete(documento)
+        # Os trechos saem junto, pelo ON DELETE CASCADE da chave estrangeira.
+        self._sessao.delete(self.obter(documento_id))
         self._sessao.commit()
 
     def buscar(self, documento_id: str, consulta: str, k: int) -> list[ResultadoBusca]:
         documento = self.obter(documento_id)
         vetor = self._embedder.embutir_consulta(consulta)
-        return self._banco_vetorial.buscar(documento.id, vetor, k)
+        return buscar_trechos_semelhantes(self._sessao, documento.id, vetor, k)
+
+    def _buscar_por_hash(self, hash_sha256: str) -> Documento | None:
+        return self._sessao.scalar(select(Documento).where(Documento.hash_sha256 == hash_sha256))

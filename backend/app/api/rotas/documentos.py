@@ -7,7 +7,6 @@ from app.core.config import Configuracoes, obter_configuracoes
 from app.core.excecoes import ErroArquivoGrande
 from app.db.base import obter_sessao
 from app.esquemas.documentos import BuscaRequisicao, DocumentoResposta, TrechoEncontrado
-from app.rag.banco_vetorial import BancoVetorial, obter_banco_vetorial
 from app.rag.embeddings import Embedder, obter_embedder
 from app.servicos.documentos import ServicoDocumentos
 
@@ -17,10 +16,9 @@ roteador = APIRouter(prefix="/documentos", tags=["documentos"])
 def obter_servico(
     sessao: Annotated[Session, Depends(obter_sessao)],
     embedder: Annotated[Embedder, Depends(obter_embedder)],
-    banco_vetorial: Annotated[BancoVetorial, Depends(obter_banco_vetorial)],
     configuracoes: Annotated[Configuracoes, Depends(obter_configuracoes)],
 ) -> ServicoDocumentos:
-    return ServicoDocumentos(sessao, embedder, banco_vetorial, configuracoes)
+    return ServicoDocumentos(sessao, embedder, configuracoes)
 
 
 Servico = Annotated[ServicoDocumentos, Depends(obter_servico)]

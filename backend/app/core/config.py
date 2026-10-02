@@ -27,11 +27,14 @@ class Configuracoes(BaseSettings):
     llm_max_concorrencia: int = Field(default=4, ge=1)
     llm_timeout_segundos: float = Field(default=60, gt=0)
 
-    # SQLite, banco vetorial e cache do modelo de embeddings ficam aqui.
-    diretorio_dados: Path = Path("dados")
+    # O padrão aponta para o Postgres do docker compose visto do host; dentro do
+    # compose o serviço do backend sobrescreve com o host `db`.
+    url_banco: str = "postgresql+psycopg://provas:provas@localhost:5442/provas"
     tamanho_max_upload_mb: int = Field(default=20, ge=1)
 
     modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Na imagem Docker o modelo já vem baixado neste diretório.
+    diretorio_modelos: Path = Path("dados/modelos")
     # Em caracteres. Trechos curtos tratam de um assunto só, e o vetor de um modelo
     # pequeno como este fica mais preciso: com 1000 caracteres a busca misturava temas.
     tamanho_trecho: int = Field(default=400, ge=200)

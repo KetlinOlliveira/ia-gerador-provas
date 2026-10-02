@@ -10,13 +10,15 @@ _SEPARADOR_DE_PAGINA = "\n\n"
 
 
 @dataclass(frozen=True)
-class Trecho:
+class TrechoDividido:
     ordem: int
     texto: str
     pagina: int | None
 
 
-def dividir_em_trechos(extraido: TextoExtraido, tamanho: int, sobreposicao: int) -> list[Trecho]:
+def dividir_em_trechos(
+    extraido: TextoExtraido, tamanho: int, sobreposicao: int
+) -> list[TrechoDividido]:
     """Divide o texto em trechos de até `tamanho` caracteres, sem cortar frases.
 
     Trechos vizinhos compartilham as últimas frases (até `sobreposicao` caracteres)
@@ -26,10 +28,10 @@ def dividir_em_trechos(extraido: TextoExtraido, tamanho: int, sobreposicao: int)
     texto = _SEPARADOR_DE_PAGINA.join(extraido.paginas)
     inicios_de_pagina = _inicios_de_pagina(extraido.paginas)
 
-    trechos: list[Trecho] = []
+    trechos: list[TrechoDividido] = []
     for inicio, fim in _agrupar(_unidades(texto, tamanho), tamanho, sobreposicao):
         pagina = bisect_right(inicios_de_pagina, inicio) if extraido.paginado else None
-        trechos.append(Trecho(ordem=len(trechos), texto=texto[inicio:fim], pagina=pagina))
+        trechos.append(TrechoDividido(ordem=len(trechos), texto=texto[inicio:fim], pagina=pagina))
     return trechos
 
 

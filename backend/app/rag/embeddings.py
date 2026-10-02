@@ -4,6 +4,7 @@ from typing import Protocol
 from fastembed import TextEmbedding
 
 from app.core.config import obter_configuracoes
+from app.db.modelos import DIMENSOES_EMBEDDING
 
 
 class Embedder(Protocol):
@@ -21,13 +22,19 @@ class EmbedderLocal:
     """Embeddings locais via fastembed (ONNX, em CPU), sem chamada a API externa."""
 
     def __init__(self, nome_modelo: str, diretorio_cache: str) -> None:
+        dimensoes = TextEmbedding.get_embedding_size(nome_modelo)
+        if dimensoes != DIMENSOES_EMBEDDING:
+            raise ValueError(
+                f"O modelo {nome_modelo} gera vetores de {dimensoes} dimensões, mas a "
+                f"coluna do banco espera {DIMENSOES_EMBEDDING}. Crie uma migração antes de trocar."
+            )
         self.nome_modelo = nome_modelo
         self._diretorio_cache = diretorio_cache
         self._modelo: TextEmbedding | None = None
 
     def _obter_modelo(self) -> TextEmbedding:
-        # Carregado só no primeiro uso: na primeira vez o modelo é baixado, e a
-        # aplicação não deve demorar a subir por causa disso.
+        # Carregado só no primeiro uso, para a aplicação subir rápido. Fora do
+        # Docker, na primeira vez, o modelo também é baixado nesse momento.
         if self._modelo is None:
             self._modelo = TextEmbedding(self.nome_modelo, cache_dir=self._diretorio_cache)
         return self._modelo
@@ -43,6 +50,5 @@ class EmbedderLocal:
 def obter_embedder() -> Embedder:
     configuracoes = obter_configuracoes()
     return EmbedderLocal(
-        configuracoes.modelo_embeddings,
-        diretorio_cache=str(configuracoes.diretorio_dados / "modelos"),
+        configuracoes.modelo_embeddings, diretorio_cache=str(configuracoes.diretorio_modelos)
     )
