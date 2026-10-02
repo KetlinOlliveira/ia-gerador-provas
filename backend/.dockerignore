@@ -1,0 +1,10 @@
+.venv/
+dados/
+.env
+.env.*
+!.env.example
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+Dockerfile
+.dockerignore
