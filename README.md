@@ -83,6 +83,17 @@ Fora do Docker, o primeiro envio de documento baixa o modelo de embeddings (cerc
 | `GET` | `/api/v1/documentos/{id}` | Detalhes de um documento |
 | `DELETE` | `/api/v1/documentos/{id}` | Remove o documento e seus trechos |
 | `POST` | `/api/v1/documentos/{id}/busca` | Busca semântica nos trechos do documento |
+| `POST` | `/api/v1/provas` | Cria uma prova e começa a gerá-la em segundo plano (responde 202) |
+| `GET` | `/api/v1/provas/{id}/eventos` | Progresso da geração em tempo real (Server-Sent Events) |
+| `GET` | `/api/v1/provas` | Histórico com busca, filtro de dificuldade, ordem e paginação |
+| `GET` | `/api/v1/provas/estatisticas` | Total de provas e quantas foram criadas no mês |
+| `GET` | `/api/v1/provas/{id}` | Prova completa: questões, gabarito, fontes e avaliação do revisor |
+| `GET` | `/api/v1/provas/{id}/exportar` | Exporta em `pdf`, `docx` ou `md`, versão `aluno` ou `professor` |
+| `DELETE` | `/api/v1/provas/{id}` | Remove a prova do histórico |
+
+A geração roda em segundo plano no próprio processo da API e grava o progresso no banco,
+de onde o fluxo de eventos lê. Se o servidor reiniciar no meio, a prova é marcada como
+falha na subida seguinte, com uma mensagem pedindo para gerar de novo.
 
 ## Testes
 

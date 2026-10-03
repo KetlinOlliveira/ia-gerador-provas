@@ -49,6 +49,10 @@ class Configuracoes(BaseSettings):
     modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     # Na imagem Docker o modelo já vem baixado neste diretório.
     diretorio_modelos: Path = Path("dados/modelos")
+    # Usa só o modelo em cache, sem consultar o Hugging Face. Sem isso o fastembed vai
+    # à rede a cada carga e, no container, levava minutos para começar. A imagem Docker
+    # liga esta opção, porque o modelo vem baixado nela.
+    embeddings_somente_local: bool = False
     # Em caracteres. Trechos curtos tratam de um assunto só, e o vetor de um modelo
     # pequeno como este fica mais preciso: com 1000 caracteres a busca misturava temas.
     tamanho_trecho: int = Field(default=400, ge=200)

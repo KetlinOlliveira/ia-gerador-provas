@@ -11,10 +11,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Configuracoes, obter_configuracoes
-from app.db.base import obter_sessao
+from app.db.base import obter_fabrica_sessao
 from app.db.modelos import DIMENSOES_EMBEDDING
+from app.llm.cliente import obter_cliente_llm
 from app.main import app
 from app.rag.embeddings import obter_embedder
+from tests.falsos import LLMFalso
 
 
 class EmbedderFalso:
@@ -77,8 +79,11 @@ def url_banco_testes():
 def engine_testes(url_banco_testes):
     engine = create_engine(url_banco_testes)
     yield engine
+    # DELETE em vez de TRUNCATE: com poucas linhas é bem mais rápido, porque o TRUNCATE
+    # recria os arquivos das tabelas e paga o fsync lento do volume Docker no Windows.
     with engine.begin() as conexao:
-        conexao.execute(text("TRUNCATE documentos, trechos RESTART IDENTITY CASCADE"))
+        for tabela in ("provas", "trechos", "documentos"):
+            conexao.execute(text(f"DELETE FROM {tabela}"))
     engine.dispose()
 
 
@@ -91,18 +96,26 @@ def configuracoes():
 
 
 @pytest.fixture
-def cliente(engine_testes, configuracoes):
-    fabrica = sessionmaker(engine_testes, expire_on_commit=False)
+def fabrica_testes(engine_testes):
+    return sessionmaker(engine_testes, expire_on_commit=False)
+
+
+@pytest.fixture
+def llm_falso():
+    """Troque nos testes que precisam de outro comportamento: `llm_falso.falhar_em = ...`."""
+    return LLMFalso()
+
+
+@pytest.fixture
+def cliente(fabrica_testes, configuracoes, llm_falso):
     embedder = EmbedderFalso()
 
-    def sessao_de_teste():
-        with fabrica() as sessao:
-            yield sessao
-
     app.dependency_overrides[obter_configuracoes] = lambda: configuracoes
-    app.dependency_overrides[obter_sessao] = sessao_de_teste
+    app.dependency_overrides[obter_fabrica_sessao] = lambda: fabrica_testes
     app.dependency_overrides[obter_embedder] = lambda: embedder
+    app.dependency_overrides[obter_cliente_llm] = lambda: llm_falso
     try:
+        # Sem `with`: o ciclo de vida da aplicação (que usa o banco real) não roda.
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()

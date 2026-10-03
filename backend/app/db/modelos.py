@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -49,3 +50,36 @@ class Trecho(Base):
     embedding: Mapped[list[float]] = mapped_column(Vector(DIMENSOES_EMBEDDING))
 
     documento: Mapped[Documento] = relationship(back_populates="trechos")
+
+
+class Prova(Base):
+    """Uma prova do histórico, da criação (pendente) até concluída ou com falha.
+
+    As questões ficam em JSONB dentro da própria prova: elas sempre são lidas
+    juntas, e o formato acompanha o esquema Pydantic sem migração a cada ajuste.
+    """
+
+    __tablename__ = "provas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # SET NULL: excluir o material não apaga as provas já geradas com ele.
+    documento_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documentos.id", ondelete="SET NULL"), index=True
+    )
+    titulo: Mapped[str] = mapped_column(String(255))
+    dificuldade: Mapped[str] = mapped_column(String(10))
+    total_questoes: Mapped[int]
+    configuracao: Mapped[dict] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    etapa: Mapped[str | None] = mapped_column(String(20))
+    mensagem: Mapped[str | None] = mapped_column(String(255))
+    questoes_concluidas: Mapped[int] = mapped_column(default=0)
+    erro: Mapped[str | None] = mapped_column(Text)
+    resultado: Mapped[dict | None] = mapped_column(JSONB)
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duracao_segundos: Mapped[float | None]
+
+    documento: Mapped[Documento | None] = relationship()

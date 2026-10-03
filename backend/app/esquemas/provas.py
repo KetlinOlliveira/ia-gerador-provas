@@ -190,3 +190,64 @@ class Prova(BaseModel):
     questoes: list[QuestaoGerada]
     gerada_em: datetime
     duracao_segundos: float
+
+
+# ---------- API ----------
+
+
+class StatusProva(StrEnum):
+    PENDENTE = "pendente"
+    GERANDO = "gerando"
+    CONCLUIDA = "concluida"
+    FALHOU = "falhou"
+
+
+STATUS_FINAIS = {StatusProva.CONCLUIDA, StatusProva.FALHOU}
+
+
+class CriarProvaRequisicao(BaseModel):
+    documento_id: str
+    titulo: str | None = Field(
+        default=None, max_length=255, description="Se vazio, vem do nome do arquivo."
+    )
+    configuracao: ConfiguracaoProva
+
+
+class ProgressoProva(BaseModel):
+    status: StatusProva
+    etapa: str | None
+    mensagem: str | None
+    concluidas: int
+    total: int
+    erro: str | None
+
+
+class ProvaResumo(BaseModel):
+    id: str
+    titulo: str
+    documento_id: str | None
+    status: StatusProva
+    dificuldade: Dificuldade
+    total_questoes: int
+    criado_em: datetime
+    concluido_em: datetime | None
+
+
+class ProvaDetalhe(ProvaResumo):
+    configuracao: ConfiguracaoProva
+    progresso: ProgressoProva
+    duracao_segundos: float | None
+    topicos: list[Topico]
+    questoes: list[QuestaoGerada]
+
+
+class PaginaProvas(BaseModel):
+    itens: list[ProvaResumo]
+    total: int
+    pagina: int
+    por_pagina: int
+
+
+class EstatisticasProvas(BaseModel):
+    total: int
+    este_mes: int

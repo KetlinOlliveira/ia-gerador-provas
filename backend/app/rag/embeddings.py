@@ -1,3 +1,4 @@
+import threading
 from functools import lru_cache
 from typing import Protocol
 
@@ -21,7 +22,7 @@ class Embedder(Protocol):
 class EmbedderLocal:
     """Embeddings locais via fastembed (ONNX, em CPU), sem chamada a API externa."""
 
-    def __init__(self, nome_modelo: str, diretorio_cache: str) -> None:
+    def __init__(self, nome_modelo: str, diretorio_cache: str, somente_local: bool) -> None:
         dimensoes = TextEmbedding.get_embedding_size(nome_modelo)
         if dimensoes != DIMENSOES_EMBEDDING:
             raise ValueError(
@@ -30,14 +31,22 @@ class EmbedderLocal:
             )
         self.nome_modelo = nome_modelo
         self._diretorio_cache = diretorio_cache
+        self._somente_local = somente_local
         self._modelo: TextEmbedding | None = None
+        # O aquecimento na subida e a primeira requisição podem chegar juntos.
+        self._trava = threading.Lock()
 
     def _obter_modelo(self) -> TextEmbedding:
-        # Carregado só no primeiro uso, para a aplicação subir rápido. Fora do
-        # Docker, na primeira vez, o modelo também é baixado nesse momento.
-        if self._modelo is None:
-            self._modelo = TextEmbedding(self.nome_modelo, cache_dir=self._diretorio_cache)
-        return self._modelo
+        # Carregado no primeiro uso. Fora do Docker, na primeira vez, o modelo
+        # também é baixado nesse momento.
+        with self._trava:
+            if self._modelo is None:
+                self._modelo = TextEmbedding(
+                    self.nome_modelo,
+                    cache_dir=self._diretorio_cache,
+                    local_files_only=self._somente_local,
+                )
+            return self._modelo
 
     def embutir_trechos(self, textos: list[str]) -> list[list[float]]:
         return [vetor.tolist() for vetor in self._obter_modelo().passage_embed(textos)]
@@ -50,5 +59,7 @@ class EmbedderLocal:
 def obter_embedder() -> Embedder:
     configuracoes = obter_configuracoes()
     return EmbedderLocal(
-        configuracoes.modelo_embeddings, diretorio_cache=str(configuracoes.diretorio_modelos)
+        configuracoes.modelo_embeddings,
+        diretorio_cache=str(configuracoes.diretorio_modelos),
+        somente_local=configuracoes.embeddings_somente_local,
     )

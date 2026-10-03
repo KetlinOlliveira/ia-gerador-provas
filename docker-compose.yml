@@ -27,6 +27,11 @@ services:
         required: false
     environment:
       URL_BANCO: postgresql+psycopg://provas:provas@db:5432/provas
+      # O modelo de embeddings que vem na imagem. Fixado aqui porque o .env, pensado para
+      # rodar fora do Docker, aponta para dados/modelos, que no container é a pasta
+      # montada do Windows: lenta e com outra cópia do modelo.
+      DIRETORIO_MODELOS: /opt/modelos
+      EMBEDDINGS_SOMENTE_LOCAL: "true"
       # Eventos de arquivo do Windows não chegam ao container; o reload precisa de polling.
       WATCHFILES_FORCE_POLLING: "true"
     ports:

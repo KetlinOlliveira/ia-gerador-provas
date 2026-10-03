@@ -25,6 +25,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # não espera download, e o container funciona sem acesso ao Hugging Face.
 ARG MODELO_EMBEDDINGS=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('${MODELO_EMBEDDINGS}', cache_dir='/opt/modelos')"
+# Daqui em diante, só o modelo embutido: sem isso o fastembed consulta o Hugging Face
+# a cada carga e a primeira prova esperava minutos.
+ENV EMBEDDINGS_SOMENTE_LOCAL=true
 
 EXPOSE 8000
 

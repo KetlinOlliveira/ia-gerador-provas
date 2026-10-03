@@ -14,6 +14,11 @@ class ErroNaoEncontrado(ErroAplicacao):
     codigo = "nao_encontrado"
 
 
+class ErroConflito(ErroAplicacao):
+    status_http = 409
+    codigo = "conflito"
+
+
 class ErroArquivoGrande(ErroAplicacao):
     status_http = 413
     codigo = "arquivo_grande"
