@@ -90,6 +90,7 @@ Fora do Docker, o primeiro envio de documento baixa o modelo de embeddings (cerc
 | `GET` | `/api/v1/provas/{id}` | Prova completa: questões, gabarito, fontes e avaliação do revisor |
 | `GET` | `/api/v1/provas/{id}/exportar` | Exporta em `pdf`, `docx` ou `md`, versão `aluno` ou `professor` |
 | `DELETE` | `/api/v1/provas/{id}` | Remove a prova do histórico |
+| `GET` | `/api/v1/sistema` | Modelos de cada agente e parâmetros do pipeline (sem segredos) |
 
 A geração roda em segundo plano no próprio processo da API e grava o progresso no banco,
 de onde o fluxo de eventos lê. Se o servidor reiniciar no meio, a prova é marcada como
