@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um push novo no mesmo ramo cancela a execução anterior, que já ficou obsoleta.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (ruff + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      # Os testes de API rodam contra um Postgres de verdade, com a extensão pgvector.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: provas
+          POSTGRES_PASSWORD: provas
+          POSTGRES_DB: provas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U provas -d provas"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # O conftest cria e migra este banco sozinho.
+      URL_BANCO_TESTES: postgresql+psycopg://provas:provas@localhost:5432/provas_testes
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Esta action não publica a tag da versão maior (v10), só versões completas.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Instalar dependências
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Formatação
+        run: uv run ruff format --check .
+
+      - name: Testes
+        run: uv run pytest
+
+  frontend:
+    name: Frontend (eslint + tipos + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npx vite build
+
+  docker:
+    name: Imagens Docker de produção
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Backend
+        uses: docker/build-push-action@v7
+        with:
+          context: backend
+          target: producao
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          target: producao
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
