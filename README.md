@@ -11,8 +11,9 @@ partir do material de aula enviado pelo professor, usando RAG e um pipeline de a
 
 ```
 docker compose
-├── db       Postgres 16 + pgvector: documentos, trechos e seus embeddings
-└── backend  FastAPI: ingestão, embeddings locais (fastembed), busca e agentes LLM (Groq)
+├── db        Postgres 16 + pgvector: documentos, trechos, embeddings e provas
+├── backend   FastAPI: ingestão, embeddings locais (fastembed), busca e agentes LLM (Groq)
+└── frontend  React + TanStack Router/Query: criação, acompanhamento e histórico de provas
 ```
 
 Documentos e vetores ficam no mesmo banco, então são gravados na mesma transação e a busca
@@ -49,6 +50,7 @@ cp backend/.env.example backend/.env    # preencha GROQ_API_KEY
 docker compose up --build
 ```
 
+- Aplicação: http://localhost:5173
 - API: http://localhost:8010/api/v1/health
 - Documentação interativa: http://localhost:8010/docs
 - Postgres: `localhost:5442` (usuário, senha e banco: `provas`)
@@ -56,7 +58,7 @@ docker compose up --build
 As migrações do banco rodam automaticamente quando o backend sobe. O código do backend é
 montado no container, então alterações recarregam a API sem reconstruir a imagem.
 
-As portas do host podem ser trocadas com as variáveis `PORTA_API` e `PORTA_BANCO`, por
+As portas do host podem ser trocadas com as variáveis `PORTA_FRONTEND`, `PORTA_API` e `PORTA_BANCO`, por
 exemplo em um arquivo `.env` na raiz do projeto.
 
 ## Rodando o backend fora do Docker
@@ -73,6 +75,29 @@ uv run uvicorn app.main:app --reload
 
 Fora do Docker, o primeiro envio de documento baixa o modelo de embeddings (cerca de
 240 MB) para `backend/dados/modelos`.
+
+## Frontend
+
+Feito em React a partir do protótipo de design do PROVAI, com as mesmas telas e o mesmo
+estilo, ligadas à API real:
+
+- **Criar prova**: envio do material, dificuldade, quantidade e tipos. O modal de progresso
+  acompanha a geração em tempo real pelo fluxo de eventos (SSE): envio e indexação, tópicos
+  do planejador e cada questão concluída pelo gerador e pelo revisor.
+- **Minhas provas**: histórico com busca, filtro, ordem e paginação feitos no servidor,
+  download em PDF, Word ou Markdown, gerar novamente e excluir.
+- **Prova**: questões com gabarito sob demanda, os trechos do material que fundamentam cada
+  questão e as observações do agente revisor.
+- **Configurações**: preferências padrão de geração e os modelos e parâmetros do pipeline.
+
+Para rodar fora do Docker (com o backend no ar na porta 8010):
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+npm test
+```
 
 ## Endpoints
 
@@ -109,6 +134,12 @@ docker compose exec backend pytest
 cd backend
 uv run pytest
 uv run ruff check .
+
+# frontend
+cd frontend
+npm test
+npm run lint
+npm run typecheck
 ```
 
 ## Migrações

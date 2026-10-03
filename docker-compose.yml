@@ -42,5 +42,21 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      target: desenvolvimento
+    environment:
+      API_PROXY_ALVO: http://backend:8000
+      VITE_POLLING: "true"
+    ports:
+      - "${PORTA_FRONTEND:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # node_modules fica no container: o do Windows tem binários de outra plataforma.
+      - /app/node_modules
+    depends_on:
+      - backend
+
 volumes:
   dados_postgres:
