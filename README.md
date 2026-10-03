@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/KetlinOlliveira/ia-gerador-provas/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KetlinOlliveira/ia-gerador-provas/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
   <img alt="PostgreSQL + pgvector" src="https://img.shields.io/badge/PostgreSQL_16-pgvector-4169E1?logo=postgresql&logoColor=white">
