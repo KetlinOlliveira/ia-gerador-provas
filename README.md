@@ -1,111 +1,265 @@
-# IA Gerador de Provas
+<p align="center">
+  <img src="docs/fluxo.svg" alt="PROVAI: do material de aula à prova com gabarito, com RAG e um pipeline de agentes" width="100%">
+</p>
 
-Gera provas (múltipla escolha, dissertativas e verdadeiro/falso) com gabarito comentado a
-partir do material de aula enviado pelo professor, usando RAG e um pipeline de agentes
-(planejador, gerador e revisor).
+<p align="center">
+  <img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
+  <img alt="PostgreSQL + pgvector" src="https://img.shields.io/badge/PostgreSQL_16-pgvector-4169E1?logo=postgresql&logoColor=white">
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white">
+  <img alt="Groq" src="https://img.shields.io/badge/LLM-Groq-F55036">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white">
+</p>
 
-> Em desenvolvimento. O protótipo original, feito no Google Colab, está em
-> [notebooks/](notebooks/).
+**PROVAI** transforma o material de aula do professor (PDF, Word ou texto) em uma prova
+pronta, com questões de múltipla escolha, dissertativas e de verdadeiro ou falso, gabarito
+comentado e critérios de correção.
+
+Por trás da interface há um pipeline de **RAG** com embeddings locais e **pgvector**, e três
+**agentes LLM** com papéis separados: um planeja os tópicos, outro escreve cada questão só com
+os trechos recuperados do material, e um terceiro revisa. Questões reprovadas voltam para o
+gerador com as críticas do revisor, e cada questão mostra de quais trechos do material saiu.
+
+## Destaques
+
+- **Questões fundamentadas no material.** O gerador recebe apenas os trechos recuperados por
+  busca semântica e informa quais usou; a interface mostra esses trechos ao lado da questão.
+- **Revisão com Reflection de verdade.** Um modelo maior avalia clareza, nível e
+  fundamentação; a aprovação é decidida pelo código, e a questão reprovada é refeita
+  recebendo os problemas apontados.
+- **Saída estruturada e validada.** Cada agente devolve um modelo Pydantic: o provedor
+  restringe a geração ao JSON Schema e as regras de negócio (como os critérios de correção
+  somarem 10) são validadas e devolvidas ao modelo quando falham.
+- **Progresso em tempo real.** A prova é gerada em segundo plano e a interface acompanha cada
+  etapa por Server-Sent Events.
+- **Histórico e exportação.** Busca, filtros e paginação no servidor; exportação em PDF, Word
+  e Markdown, nas versões do aluno e do professor.
+- **110 testes automatizados**: 81 no backend (com Postgres real) e 29 no frontend.
+
+## Telas
+
+<!--
+  Adicione os prints em docs/telas/ e remova este comentário. Sugestão de nomes:
+
+<p align="center">
+  <img src="docs/telas/criar-prova.png" alt="Criar prova" width="49%">
+  <img src="docs/telas/progresso.png" alt="Modal de progresso da geração" width="49%">
+</p>
+<p align="center">
+  <img src="docs/telas/prova.png" alt="Prova com gabarito e fontes no material" width="49%">
+  <img src="docs/telas/minhas-provas.png" alt="Histórico de provas" width="49%">
+</p>
+-->
 
 ## Arquitetura
 
+```mermaid
+flowchart LR
+    prof(["Professor"])
+
+    subgraph web["frontend · React 19"]
+        telas["Criar prova · Minhas provas<br/>Prova · Configurações"]
+    end
+
+    subgraph api["backend · FastAPI"]
+        ingestao["Ingestão<br/>extração e divisão em trechos"]
+        emb["Embeddings locais<br/>fastembed · ONNX"]
+        tarefa["Geração em segundo plano"]
+        orq["Orquestrador<br/>planejador · gerador · revisor"]
+        export["Exportação<br/>PDF · DOCX · Markdown"]
+    end
+
+    subgraph dados["PostgreSQL 16 + pgvector"]
+        tabelas[("documentos · trechos (vector 384)<br/>provas (JSONB)")]
+    end
+
+    groq["Groq<br/>gpt-oss-20b · gpt-oss-120b"]
+
+    prof --> telas
+    telas -- "upload" --> ingestao
+    ingestao --> emb --> tabelas
+    telas -- "cria a prova · SSE de progresso" --> tarefa
+    tarefa --> orq
+    orq -- "busca por similaridade de cosseno" --> tabelas
+    orq -- "JSON Schema estrito" --> groq
+    tarefa -- "progresso e resultado" --> tabelas
+    telas -- "download" --> export
 ```
-docker compose
-├── db        Postgres 16 + pgvector: documentos, trechos, embeddings e provas
-├── backend   FastAPI: ingestão, embeddings locais (fastembed), busca e agentes LLM (Groq)
-└── frontend  React + TanStack Router/Query: criação, acompanhamento e histórico de provas
+
+### Como uma prova é gerada
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Frontend
+    participant API as FastAPI
+    participant P as Planejador
+    participant DB as pgvector
+    participant G as Gerador
+    participant R as Revisor
+
+    UI->>API: POST /provas (material + configuração)
+    API-->>UI: 202 com o id da prova
+    UI->>API: GET /provas/id/eventos (SSE)
+    API->>P: amostra espalhada pelo documento
+    P-->>API: tópicos da prova
+    par tópicos em paralelo
+        API->>DB: trechos mais próximos do tópico
+        loop cada questão do tópico
+            loop até ser aprovada (no máximo 2 versões)
+                API->>G: trechos, regras do tipo e o que já foi cobrado
+                G-->>API: questão, gabarito e trechos usados
+                API->>R: questão e os mesmos trechos
+                R-->>API: nota, fundamentação e problemas
+            end
+            API-->>UI: evento "Questão n de N pronta"
+        end
+    end
+    API-->>UI: evento fim (prova concluída)
 ```
 
-Documentos e vetores ficam no mesmo banco, então são gravados na mesma transação e a busca
-semântica é uma consulta SQL comum, ordenada pela distância de cosseno do pgvector.
+| Agente | Modelo | O que faz |
+|---|---|---|
+| Planejador | `gpt-oss-20b` | Lê uma amostra espalhada pelo documento inteiro e define os tópicos da prova. |
+| Gerador | `gpt-oss-20b` | Escreve questão e gabarito na mesma chamada, só com os trechos recuperados. |
+| Revisor | `gpt-oss-120b` | Avalia clareza, dificuldade e se o gabarito é sustentado pelos trechos. |
 
-### Pipeline de agentes
+Os modelos são configuráveis por papel no `.env`.
 
-```
-documento ─► Planejador ─► tópicos ─► para cada questão:
-                                        Recuperação (RAG) dos trechos do tópico
-                                        Gerador ─► questão + gabarito + trechos citados
-                                        Revisor ─► nota, fundamentação, problemas
-                                          └─ reprovada? o Gerador refaz com as críticas
-```
+## Decisões técnicas
 
-- **Planejador**: lê uma amostra espalhada pelo documento inteiro e extrai os subtemas.
-- **Gerador**: escreve a questão e o gabarito na mesma chamada, só com base nos trechos
-  recuperados, e informa quais trechos usou (as fontes da questão).
-- **Revisor**: um modelo maior avalia clareza, nível de dificuldade e se o gabarito é
-  sustentado pelo material. A aprovação é decidida pelo código, não pelo modelo.
-- **Orquestrador**: tópicos diferentes são gerados em paralelo; questões do mesmo tópico,
-  em sequência, para não se repetirem.
+**Postgres com pgvector em vez de um banco vetorial separado.** Documentos, trechos, vetores
+e provas ficam no mesmo banco. Documento e vetores são gravados na mesma transação, então não
+existe documento sem vetores nem vetores órfãos, e a busca semântica é uma consulta SQL comum.
+A primeira versão usava SQLite e ChromaDB e precisava de código para desfazer gravações quando
+um dos dois falhava; esse código deixou de existir.
 
-A saída de cada agente é um modelo Pydantic. O provedor restringe a geração ao JSON Schema
-(modo estrito), e regras que o esquema não expressa, como os critérios de correção somarem
-10, são validadas no código e devolvidas ao modelo para correção.
+**Busca exata, sem índice HNSW.** A busca é sempre dentro de um documento, que tem algumas
+centenas de trechos: percorrer todos é rápido e nunca perde resultado. Um índice aproximado
+com filtro por documento pode devolver menos trechos que o pedido. O HNSW passa a valer quando
+houver busca entre todos os documentos.
 
-## Rodando com Docker
+**Embeddings locais.** O modelo multilíngue `paraphrase-multilingual-MiniLM-L12-v2` roda em
+ONNX via fastembed, sem custo, sem segunda chave de API e sem o material sair do servidor. Ele
+vem embutido na imagem Docker. O tamanho dos trechos foi medido, não chutado: com 1000
+caracteres cada trecho misturava assuntos e a busca errava; com 400, a pergunta sobre
+autenticação passou a trazer o parágrafo de JWT em primeiro.
 
-Requer Docker com o Compose.
+**Divisão em trechos que respeita frases.** Os trechos não cortam frases, compartilham a
+última frase com o vizinho para não perder ideias na fronteira e guardam a página em que
+começam, o que permite citar a página de cada fonte.
+
+**Orquestração própria, sem LangChain.** O pipeline tem três agentes e um laço de revisão:
+escrito à mão, ele fica pequeno, testável com um LLM falso e sem camadas de abstração entre o
+código e o comportamento do modelo.
+
+**Saída estrita por JSON Schema e validação com retorno ao modelo.** O provedor só deixa o
+modelo gerar JSON que obedeça ao esquema. O que o esquema não expressa (critérios somando 10,
+alternativas distintas, V/F misturando verdadeiras e falsas) fica nos validadores Pydantic;
+quando um falha, o erro é devolvido ao modelo, que corrige a resposta.
+
+**Questão e gabarito na mesma chamada.** O protótipo gerava o gabarito em outra chamada, sem o
+material, e ele podia contradizer a questão. Agora os dois nascem juntos, com os mesmos trechos.
+
+**A aprovação é do código, não do modelo.** O revisor devolve nota e se o gabarito tem base no
+material; a questão só passa com nota mínima e fundamentada. Uma questão bem escrita, mas sem
+base nos trechos, é refeita.
+
+**Um modelo maior só para revisar.** Julgar se o gabarito está sustentado pelo material é a
+tarefa mais difícil do pipeline, então o revisor usa um modelo maior; planejar e escrever usam
+um menor e mais rápido.
+
+**Letra correta sorteada.** Modelos tendem a colocar a resposta certa em A ou B; o orquestrador
+sorteia a letra e a informa ao gerador.
+
+**Geração em segundo plano com progresso no banco.** A API responde na hora e grava o
+progresso no Postgres; o fluxo SSE lê de lá. Isso sobrevive a recarregar a página e permite
+acompanhar a mesma prova de qualquer lugar. Como a tarefa roda no processo da API, uma prova
+interrompida por reinício é marcada como falha na subida seguinte, em vez de ficar "gerando"
+para sempre. Com mais de um processo, o próximo passo seria uma fila dedicada.
+
+**Questões em JSONB.** As questões são sempre lidas junto com a prova, e o formato acompanha
+os esquemas Pydantic sem uma migração a cada ajuste.
+
+**Exportação a partir de blocos neutros.** A prova vira uma lista de blocos (título, questão,
+item, gabarito) uma única vez; Markdown, DOCX e PDF só desenham esses blocos, então as três
+versões nunca divergem no conteúdo.
+
+**O material é tratado como dado, não como instrução.** Os trechos vão delimitados no prompt,
+com a orientação de ignorar qualquer comando que apareça neles.
+
+**Testes contra o banco real.** Os testes de API rodam num Postgres de verdade, migrado pelo
+Alembic, com um LLM falso que responde conforme o esquema pedido. Assim o SQL, o pgvector e as
+migrações são testados de fato, e a suíte não gasta tokens.
+
+## Rodando localmente
+
+Requer Docker com o Compose e uma chave gratuita da [Groq](https://console.groq.com/keys).
 
 ```bash
 cp backend/.env.example backend/.env    # preencha GROQ_API_KEY
 docker compose up --build
 ```
 
-- Aplicação: http://localhost:5173
-- API: http://localhost:8010/api/v1/health
-- Documentação interativa: http://localhost:8010/docs
-- Postgres: `localhost:5442` (usuário, senha e banco: `provas`)
+| Serviço | Endereço |
+|---|---|
+| Aplicação | http://localhost:5173 |
+| API e documentação interativa | http://localhost:8010/docs |
+| Postgres | `localhost:5442` (usuário, senha e banco: `provas`) |
 
-As migrações do banco rodam automaticamente quando o backend sobe. O código do backend é
-montado no container, então alterações recarregam a API sem reconstruir a imagem.
+As migrações rodam sozinhas quando o backend sobe, e o código dos dois serviços é montado nos
+containers, então as alterações recarregam sem reconstruir as imagens. As portas do host podem
+ser trocadas com `PORTA_FRONTEND`, `PORTA_API` e `PORTA_BANCO` num `.env` na raiz.
 
-As portas do host podem ser trocadas com as variáveis `PORTA_FRONTEND`, `PORTA_API` e `PORTA_BANCO`, por
-exemplo em um arquivo `.env` na raiz do projeto.
+<details>
+<summary>Rodando fora do Docker</summary>
 
-## Rodando o backend fora do Docker
-
-Útil para depurar. Requer [uv](https://docs.astral.sh/uv/) e o banco do compose no ar.
+Backend (requer [uv](https://docs.astral.sh/uv/) e o banco do compose no ar):
 
 ```bash
 docker compose up -d db
 cd backend
 uv sync
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --port 8010
 ```
 
-Fora do Docker, o primeiro envio de documento baixa o modelo de embeddings (cerca de
-240 MB) para `backend/dados/modelos`.
+Fora do Docker, o primeiro envio de documento baixa o modelo de embeddings (cerca de 240 MB)
+para `backend/dados/modelos`.
 
-## Frontend
-
-Feito em React a partir do protótipo de design do PROVAI, com as mesmas telas e o mesmo
-estilo, ligadas à API real:
-
-- **Criar prova**: envio do material, dificuldade, quantidade e tipos. O modal de progresso
-  acompanha a geração em tempo real pelo fluxo de eventos (SSE): envio e indexação, tópicos
-  do planejador e cada questão concluída pelo gerador e pelo revisor.
-- **Minhas provas**: histórico com busca, filtro, ordem e paginação feitos no servidor,
-  download em PDF, Word ou Markdown, gerar novamente e excluir.
-- **Prova**: questões com gabarito sob demanda, os trechos do material que fundamentam cada
-  questão e as observações do agente revisor.
-- **Configurações**: preferências padrão de geração e os modelos e parâmetros do pipeline.
-
-Para rodar fora do Docker (com o backend no ar na porta 8010):
+Frontend:
 
 ```bash
 cd frontend
 npm install
-npm run dev        # http://localhost:5173
-npm test
+npm run dev        # http://localhost:5173, repassando /api para a porta 8010
 ```
 
-## Endpoints
+</details>
+
+## Testes
+
+```bash
+# backend (81 testes, com o banco do compose no ar)
+cd backend
+uv run pytest
+uv run ruff check .
+
+# frontend (29 testes)
+cd frontend
+npm test
+npm run lint
+npm run typecheck
+```
+
+Os testes do backend criam e migram sozinhos um banco separado, `provas_testes`.
+
+## API
 
 | Método | Rota | Descrição |
 |---|---|---|
 | `POST` | `/api/v1/documentos` | Envia um `.txt`, `.pdf` ou `.docx`, que é dividido em trechos e indexado |
 | `GET` | `/api/v1/documentos` | Lista os documentos enviados |
-| `GET` | `/api/v1/documentos/{id}` | Detalhes de um documento |
 | `DELETE` | `/api/v1/documentos/{id}` | Remove o documento e seus trechos |
 | `POST` | `/api/v1/documentos/{id}/busca` | Busca semântica nos trechos do documento |
 | `POST` | `/api/v1/provas` | Cria uma prova e começa a gerá-la em segundo plano (responde 202) |
@@ -115,37 +269,45 @@ npm test
 | `GET` | `/api/v1/provas/{id}` | Prova completa: questões, gabarito, fontes e avaliação do revisor |
 | `GET` | `/api/v1/provas/{id}/exportar` | Exporta em `pdf`, `docx` ou `md`, versão `aluno` ou `professor` |
 | `DELETE` | `/api/v1/provas/{id}` | Remove a prova do histórico |
-| `GET` | `/api/v1/sistema` | Modelos de cada agente e parâmetros do pipeline (sem segredos) |
+| `GET` | `/api/v1/sistema` | Modelos de cada agente e parâmetros do pipeline |
 
-A geração roda em segundo plano no próprio processo da API e grava o progresso no banco,
-de onde o fluxo de eventos lê. Se o servidor reiniciar no meio, a prova é marcada como
-falha na subida seguinte, com uma mensagem pedindo para gerar de novo.
+A documentação completa, com os esquemas de cada requisição, fica em `/docs` com a API no ar.
 
-## Testes
+## Estrutura
 
-Os testes de API rodam contra um Postgres real, num banco separado (`provas_testes`) que é
-criado e migrado automaticamente.
-
-```bash
-# dentro do container
-docker compose exec backend pytest
-
-# ou no host, com o banco do compose no ar
-cd backend
-uv run pytest
-uv run ruff check .
-
-# frontend
-cd frontend
-npm test
-npm run lint
-npm run typecheck
+```
+backend/
+  app/
+    agentes/      planejador, gerador, revisor, orquestrador e prompts
+    rag/          embeddings e busca semântica
+    ingestao/     extração de texto (PDF, DOCX, TXT) e divisão em trechos
+    llm/          cliente da Groq com saída estrita e validação
+    servicos/     casos de uso: documentos, geração e ciclo de vida das provas
+    exportacao/   PDF, DOCX e Markdown a partir de blocos neutros
+    api/rotas/    rotas HTTP
+    db/           modelos SQLAlchemy
+  migracoes/      Alembic
+  tests/
+frontend/
+  src/
+    routes/       telas (TanStack Router, rotas por arquivo)
+    components/   modal de progresso, menus e layout
+    hooks/        geração com SSE
+    api/          cliente e tipos da API
+notebooks/        protótipo original feito no Google Colab
 ```
 
-## Migrações
+## Próximos passos
 
-```bash
-cd backend
-uv run alembic revision -m "descricao da mudanca"   # cria uma migração nova
-uv run alembic upgrade head                          # aplica as pendentes
-```
+- Contas de usuário, com provas e materiais separados por pessoa.
+- Uma avaliação automatizada da qualidade: um conjunto fixo de materiais para medir a taxa de
+  aprovação de primeira, de questões refeitas e de questões sem base no material.
+- Fila de tarefas dedicada, para rodar a geração fora do processo da API.
+- Edição manual das questões antes de exportar.
+
+## Origem
+
+O projeto começou como um notebook no Google Colab, feito na faculdade, que está preservado em
+[notebooks/](notebooks/). A reescrita trocou a geração a partir só do nome do tópico por RAG
+sobre o material, a revisão "tenta de novo" por revisão com retorno das críticas, e o
+notebook por uma aplicação completa com API, banco, interface e testes.
