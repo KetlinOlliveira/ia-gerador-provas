@@ -38,18 +38,20 @@ gerador com as críticas do revisor, e cada questão mostra de quais trechos do 
 
 ## Telas
 
-<!--
-  Adicione os prints em docs/telas/ e remova este comentário. Sugestão de nomes:
 
 <p align="center">
-  <img src="docs/telas/criar-prova.png" alt="Criar prova" width="49%">
-  <img src="docs/telas/progresso.png" alt="Modal de progresso da geração" width="49%">
+ <img width="1864" height="903" alt="Captura de tela 2026-10-02 231115" src="https://github.com/user-attachments/assets/7b23cc16-5dd6-48a3-b0f7-bdf5c6212d03" /></p>
+<p align="center">
+  <img width="1857" height="898" alt="Captura de tela 2026-10-02 231127" src="https://github.com/user-attachments/assets/53d5f093-99b2-4546-949a-c69ead790323" />
 </p>
 <p align="center">
-  <img src="docs/telas/prova.png" alt="Prova com gabarito e fontes no material" width="49%">
-  <img src="docs/telas/minhas-provas.png" alt="Histórico de provas" width="49%">
+
+<img width="1844" height="885" alt="Captura de tela 2026-10-02 231145" src="https://github.com/user-attachments/assets/e60e70db-fad1-460c-90e9-f84a71a94df7" />
+<img width="1824" height="898" alt="Captura de tela 2026-10-02 231158" src="https://github.com/user-attachments/assets/76b1f662-cdf9-40fe-9671-1fe271422081" />
 </p>
--->
+<p><img width="433" height="912" alt="image" src="https://github.com/user-attachments/assets/efcdf913-dd04-4de4-8b9e-77daf86c5fbd" /></p>
+
+
 
 ## Arquitetura
 
